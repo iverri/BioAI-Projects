@@ -1,4 +1,4 @@
-function evaluate_travel_time(solution, travel_matrix)
+function evaluate_travel_time(solution::Solution, travel_matrix::Matrix{Float64})
     total_time = 0.0
     for route in solution.routes
         if !isempty(route.patients)

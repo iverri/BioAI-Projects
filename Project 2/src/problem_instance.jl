@@ -1,4 +1,8 @@
+module ProblemInstance
+
 using JSON
+
+export load_problem_instance
 
 function load_problem_instance(file_path::String)
     open(file_path, "r") do file
@@ -6,4 +10,4 @@ function load_problem_instance(file_path::String)
     end
 end
 
-load_problem_instance("train/train_0.json")
+end
