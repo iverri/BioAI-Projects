@@ -47,4 +47,4 @@ def plot_solution(case_no):
     plt.show()
 
 
-plot_solution(2)
+plot_solution(0)
