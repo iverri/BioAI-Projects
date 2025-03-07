@@ -20,7 +20,7 @@ function initialize_solution(n_nurses::Int, patients::Dict{String,Any}, travel_m
         current_time = 0.0
         current_demand = 0
         while true
-            best_patient, current_time = greedy_shortest(current_patient, current_time, current_demand, remaining_patients, travel_matrix, nurse_capacity, depot_return_time, patients)
+            best_patient, current_time = greedy_shortest(current_patient, Float64(current_time), current_demand, remaining_patients, travel_matrix, nurse_capacity, depot_return_time, patients)
             if best_patient == 0
                 break
             end
@@ -54,55 +54,61 @@ function solution_selection(population::Vector{Solution}, n_parents::Int, tourna
 end
 
 function crossover(parent1::Solution, parent2::Solution, n_patients::Int, travel_matrix::Vector{Any}, nurse_capacity::Int, depot_return_time::Int, patients::Dict{String,Any}, n_routes::Int=2)
-    all_patients = Set{Int}(1:n_patients)
-    assigned_patients = Set{Int}()
+    child_routes = [SolutionStructs.Route([], 0, 0.0) for _ in 1:n_routes]
+    parent1_copy = deepcopy(parent1)
+    parent2_copy = deepcopy(parent2)
+    remaining_patients = Set{Int}(1:n_patients)
 
-    child_routes = Vector{SolutionStructs.Route}()
-    selected_routes = sample(parent1.routes, rand(1:25))
-
-    for route in selected_routes
-        push!(child_routes, deepcopy(route))
-        assigned_patients = union(assigned_patients, Set(route.patients))
-    end
-
-    for route in parent2.routes
-        if all(x -> x ∈ assigned_patients, route.patients)
-            push!(child_routes, deepcopy(route))
-            assigned_patients = union(assigned_patients ∪ Set(route.patients))
-        end
-    end
-
-    missing_patients = setdiff(all_patients, assigned_patients)
-
-    leftover_routes = 25 - length(child_routes)
-    if leftover_routes < 0
-        return SolutionStructs.Solution(child_routes, sum([route.total_travel_time for route in child_routes]))
-    end
-
-    for i in 1:leftover_routes
-        if isempty(missing_patients)
-            break
-        end
-        current_patient = 0
-        current_time = 0.0
-        current_demand = 0
-        route = SolutionStructs.Route([], 0, 0.0)
-        while true
-            best_patient, current_time = greedy_shortest(current_patient, float(current_time), current_demand, missing_patients, travel_matrix, nurse_capacity, depot_return_time, patients)
-            if best_patient == 0
-                break
+    for route in child_routes
+        if rand() < 0.5
+            potential_route = popat!(parent1_copy.routes, rand(1:length(parent1_copy.routes)))
+            if union(remaining_patients, Set{Int}(potential_route.patients)) == remaining_patients
+                route.patients = potential_route.patients
+                for patient in route.patients
+                    delete!(remaining_patients, patient)
+                end
             end
-            push!(route.patients, best_patient)
-            current_demand += patients[string(best_patient)]["demand"]
-            current_patient = best_patient
-            delete!(missing_patients, best_patient)
+        else
+            potential_route = popat!(parent2_copy.routes, rand(1:length(parent2_copy.routes)))
+            if union(remaining_patients, Set{Int}(potential_route.patients)) == remaining_patients
+                route.patients = potential_route.patients
+                for patient in route.patients
+                    delete!(remaining_patients, patient)
+                end
+            end
         end
-        push!(child_routes, route)
+    end
+
+    for route in child_routes
+        if isempty(route.patients)
+            current_patient = 0
+            current_time = 0.0
+            current_demand = 0
+            while current_time + travel_matrix[current_patient+1][1] < depot_return_time && current_demand < nurse_capacity && !isempty(remaining_patients)
+                best_patient, current_time = greedy_shortest(current_patient, Float64(current_time), current_demand, remaining_patients, travel_matrix, nurse_capacity, depot_return_time, patients)
+                if best_patient == 0
+                    break
+                end
+                push!(route.patients, best_patient)
+                current_time += travel_matrix[current_patient+1][best_patient+1]
+                current_demand += patients[string(best_patient)]["demand"]
+                current_patient = best_patient
+                delete!(remaining_patients, best_patient)
+            end
+            route.total_demand = current_demand
+        end
+    end
+
+    for route in child_routes
+        route.total_travel_time = update_travel_time(route, travel_matrix)
+    end
+
+    if sum([route.total_demand for route in child_routes]) > nurse_capacity || isempty(remaining_patients)
+        child = initialize_solution(n_routes, patients, travel_matrix, nurse_capacity, depot_return_time)
+        return child
     end
 
     child = SolutionStructs.Solution(child_routes, sum([route.total_travel_time for route in child_routes]))
-    child.total_travel_time = sum([route.total_travel_time for route in child.routes])
-    println(child.total_travel_time)
     return child
 end
 
@@ -117,24 +123,25 @@ function mutation(solution::Solution, mutation_rate::Float64, nurse_capacity::In
         if length(mutated_routes[route2].patients) == 0
             push!(mutated_routes[route2].patients, patient)
         else
-            index = rand(1:length(mutated_routes[route2].patients))
-            insert!(mutated_routes[route2].patients, index, patient)
-        end
+            for i in 1:length(mutated_routes[route2].patients)
+                route_copy = deepcopy(mutated_routes[route2])
+                insert!(route_copy.patients, i, patient)
+                if check_constraints(route_copy, travel_matrix, depot_return_time, nurse_capacity, patients)
+                    mutated_routes[route2].patients = route_copy.patients
 
-        if !check_constraints(mutated_routes[route2], travel_matrix, depot_return_time, nurse_capacity, patients)
-            return solution
-        else
-            mutated_routes[route1].total_demand -= patients[string(patient)]["demand"]
-            mutated_routes[route1].total_travel_time = update_travel_time(mutated_routes[route1], travel_matrix)
+                    mutated_routes[route1].total_demand -= patients[string(patient)]["demand"]
+                    mutated_routes[route1].total_travel_time = update_travel_time(mutated_routes[route1], travel_matrix)
 
-            mutated_routes[route2].total_demand += patients[string(patient)]["demand"]
-            mutated_routes[route1].total_travel_time = update_travel_time(mutated_routes[route2], travel_matrix)
+                    mutated_routes[route2].total_demand += patients[string(patient)]["demand"]
+                    mutated_routes[route1].total_travel_time = update_travel_time(mutated_routes[route2], travel_matrix)
+
+                    solution.routes = mutated_routes
+                    solution.total_travel_time = sum([route.total_travel_time for route in solution.routes])
+                    break
+                end
+            end
         end
     end
-    solution.routes = mutated_routes
-    solution.total_travel_time = sum([route.total_travel_time for route in solution.routes])
-    println(solution.routes)
-    println(solution.total_travel_time)
     return solution
 end
 
@@ -195,17 +202,6 @@ function check_constraints(route::SolutionStructs.Route, travel_matrix::Vector{A
     return true
 end
 
-function update_travel_time(route::SolutionStructs.Route, travel_matrix::Vector{Any})
-    route.total_travel_time = 0.0
-    if !isempty(route.patients)
-        route.total_travel_time += travel_matrix[1][route.patients[1]]
-        for i in 1:length(route.patients)-1
-            route.total_travel_time += travel_matrix[route.patients[i]][route.patients[i+1]]
-        end
-        route.total_travel_time += travel_matrix[route.patients[end]][1]
-    end
-    return route.total_travel_time
-end
 
 
 function greedy_shortest(current_patient::Int, current_time::Float64, current_demand::Int, available_patients::Set{Int}, travel_matrix::Vector{Any}, nurse_capacity::Int, depot_return_time::Int, patients::Dict{String,Any})
@@ -232,11 +228,11 @@ function greedy_shortest(current_patient::Int, current_time::Float64, current_de
 end
 
 
-function update_travel_time(route::SolutionStructs{Route}, travel_matrix::Vector{Any})
-    route.total_travel_time = 0
+function update_travel_time(route::SolutionStructs.Route, travel_matrix::Vector{Any})
     if isempty(route.patients)
         return Inf
     else
+        route.total_travel_time = 0.0
         route.total_travel_time = travel_matrix[1][route.patients[1]]
         for i in 1:length(route.patients)-1
             route.total_travel_time += travel_matrix[route.patients[i]][route.patients[i+1]]

@@ -2,12 +2,18 @@ import json
 import matplotlib.pyplot as plt
 
 
-def plot_solution(case_no):
-    with open(f"solutions/solution_{case_no}.json") as f:
-        solution = json.load(f)
+def plot_solution(case_no, test):
 
-    with open(f"train/train_{case_no}.json") as f:
-        case = json.load(f)
+    if test:
+        with open(f"solutions/solution_{case_no}.json") as f:
+            solution = json.load(f)
+        with open(f"test/test_{case_no}.json") as f:
+            case = json.load(f)
+    else:
+        with open(f"solutions/solution_{case_no}.json") as f:
+            solution = json.load(f)
+        with open(f"train/train_{case_no}.json") as f:
+            case = json.load(f)
 
     depot = case["depot"]
     patients = case["patients"]
@@ -47,4 +53,4 @@ def plot_solution(case_no):
     plt.show()
 
 
-plot_solution(0)
+plot_solution(0, True)

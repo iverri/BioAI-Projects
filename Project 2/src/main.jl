@@ -12,8 +12,8 @@ using .GeneticAlgorithm
 using .SaveSolution
 
 function run_program(instance_no::Int)
-    instance = ProblemInstance.load_problem_instance("train/train_$instance_no.json")
-    solution = GeneticAlgorithm.genetic_algorithm(instance["nbr_nurses"], instance["patients"], instance["travel_times"], instance["capacity_nurse"], instance["depot"]["return_time"], 20, 20, 50, 10, 0.1)
+    instance = ProblemInstance.load_problem_instance("test/test_$instance_no.json")
+    solution = GeneticAlgorithm.genetic_algorithm(instance["nbr_nurses"], instance["patients"], instance["travel_times"], instance["capacity_nurse"], instance["depot"]["return_time"], 1000, 100, 50, 10, 0.3)
     SaveSolution.save_solution(solution, instance_no)
 end
 
